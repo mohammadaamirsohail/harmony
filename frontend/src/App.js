@@ -22,9 +22,8 @@ export default function App() {
   const [activeMood, setActiveMood]   = useState(null);
   const [currentSong, setCurrentSong] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [mode, setMode]               = useState("mood"); // "mood" or "search"
+  const [mode, setMode]               = useState("mood");
 
-  // Fetch by mood
   const fetchByMood = useCallback(async (mood) => {
     setLoading(true);
     setError(null);
@@ -51,7 +50,6 @@ export default function App() {
     }
   }, []);
 
-  // Search any song
   const fetchBySearch = useCallback(async (query) => {
     if (!query.trim()) return;
     setLoading(true);
@@ -79,7 +77,6 @@ export default function App() {
     }
   }, []);
 
-  // Shuffle — refetch same mood or search
   const handleShuffle = () => {
     if (mode === "mood" && activeMood) fetchByMood(activeMood);
     else if (mode === "search" && searchQuery) fetchBySearch(searchQuery);
@@ -101,10 +98,8 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        {/* Search Bar */}
         <SearchBar onSearch={fetchBySearch} loading={loading} />
 
-        {/* Mood Selector */}
         <Chatbot
           moods={MOODS}
           activeMood={activeMood}
@@ -128,6 +123,27 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Floating Signature Badge */}
+      <div style={{
+        position: "fixed",
+        bottom: "20px",
+        right: "20px",
+        background: "rgba(255,255,255,0.1)",
+        backdropFilter: "blur(10px)",
+        border: "1px solid rgba(255,255,255,0.2)",
+        borderRadius: "50px",
+        padding: "8px 16px",
+        fontSize: "13px",
+        color: "white",
+        zIndex: 9999,
+        boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+        display: "flex",
+        alignItems: "center",
+        gap: "6px"
+      }}>
+        ⚡ Built by <strong>Aamir Sohail</strong>
+      </div>
 
       <footer className="app-footer">
         Powered by YouTube · Full songs · No limits
