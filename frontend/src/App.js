@@ -35,7 +35,7 @@ export default function App() {
     setSearchQuery("");
 
     try {
-      const res  = await fetch("http://localhost:5000/api/mood", {
+      const res  = await fetch("https://harmony-j2f2.onrender.com/api/mood", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mood }),
@@ -63,7 +63,7 @@ export default function App() {
     setSearchQuery(query);
 
     try {
-      const res  = await fetch("http://localhost:5000/api/search", {
+      const res  = await fetch("https://harmony-j2f2.onrender.com/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query }),
