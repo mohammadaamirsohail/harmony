@@ -1,18 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./Player.css";
 
-function useYouTubeAPI() {
-  const [ready, setReady] = useState(!!window.YT?.Player);
-  useEffect(() => {
-    if (window.YT?.Player) { setReady(true); return; }
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.head.appendChild(tag);
-    window.onYouTubeIframeAPIReady = () => setReady(true);
-  }, []);
-  return ready;
-}
-
 function SkeletonCard() {
   return (
     <div className="song-card skeleton">
@@ -26,18 +14,17 @@ function SkeletonCard() {
 }
 
 export default function Player({ songs, loading, moodData, currentSong, onSelectSong, onShuffle, searchQuery }) {
-  const playerRef    = useRef(null);
-  const ytPlayer     = useRef(null);
+  const audioRef     = useRef(null);
   const songsRef     = useRef(songs);
   const currentRef   = useRef(currentSong);
-  const [isPlaying, setIsPlaying]   = useState(false);
-  const [progress,  setProgress]    = useState(0);
-  const [duration,  setDuration]    = useState(0);
-  const [volume,    setVolume]      = useState(80);
-  const [skipped,   setSkipped]     = useState(null);
   const intervalRef  = useRef(null);
   const skipTimerRef = useRef(null);
-  const ytReady      = useYouTubeAPI();
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress,  setProgress]  = useState(0);
+  const [duration,  setDuration]  = useState(0);
+  const [volume,    setVolume]    = useState(80);
+  const [skipped,   setSkipped]   = useState(null);
 
   // Keep refs in sync
   useEffect(() => { songsRef.current  = songs;       }, [songs]);
@@ -54,90 +41,71 @@ export default function Player({ songs, loading, moodData, currentSong, onSelect
     onSelectSong(next);
   };
 
+  // When currentSong changes — load and play new audio
   useEffect(() => {
-    if (!ytReady || !currentSong) return;
+    if (!currentSong?.audioUrl) return;
+    const audio = audioRef.current;
+    clearInterval(intervalRef.current);
     clearTimeout(skipTimerRef.current);
     setProgress(0);
     setDuration(0);
 
-    if (ytPlayer.current) {
-      ytPlayer.current.loadVideoById(currentSong.id);
-      setIsPlaying(true);
-    } else {
-      ytPlayer.current = new window.YT.Player(playerRef.current, {
-        height: "0", width: "0",
-        videoId: currentSong.id,
-        playerVars: { autoplay: 1, controls: 0 },
-        events: {
-          onReady: (e) => {
-            e.target.setVolume(volume);
-            e.target.playVideo();
-            setIsPlaying(true);
-          },
-          onStateChange: (e) => {
-            const S = window.YT.PlayerState;
+    audio.src = currentSong.audioUrl;
+    audio.volume = volume / 100;
+    audio.load();
 
-            if (e.data === S.PLAYING) {
-              setIsPlaying(true);
-              clearTimeout(skipTimerRef.current);
-              setDuration(ytPlayer.current.getDuration());
-              clearInterval(intervalRef.current);
-              intervalRef.current = setInterval(() => {
-                setProgress(ytPlayer.current.getCurrentTime());
-              }, 500);
-            }
+    const onCanPlay = () => {
+      setDuration(audio.duration);
+      audio.play().then(() => setIsPlaying(true)).catch(() => autoSkipToNext());
+    };
 
-            if (e.data === S.PAUSED) {
-              setIsPlaying(false);
-              clearInterval(intervalRef.current);
-            }
+    const onTimeUpdate = () => setProgress(audio.currentTime);
+    const onDurationChange = () => setDuration(audio.duration);
+    const onEnded = () => autoSkipToNext();
+    const onError = () => {
+      skipTimerRef.current = setTimeout(() => autoSkipToNext(), 1000);
+    };
 
-            // Auto skip if video is unplayable or errors
-            if (e.data === S.ENDED) {
-              clearInterval(intervalRef.current);
-              autoSkipToNext();
-            }
-          },
-          onError: () => {
-            // Video unplayable — auto skip after 1 second
-            skipTimerRef.current = setTimeout(() => {
-              autoSkipToNext();
-            }, 1000);
-          },
-        },
-      });
-    }
+    audio.addEventListener("canplay",        onCanPlay);
+    audio.addEventListener("timeupdate",     onTimeUpdate);
+    audio.addEventListener("durationchange", onDurationChange);
+    audio.addEventListener("ended",          onEnded);
+    audio.addEventListener("error",          onError);
 
-    // Safety net — if nothing plays in 8 seconds, auto skip
+    // Safety net — if nothing plays in 8s, skip
     skipTimerRef.current = setTimeout(() => {
-      try {
-        const state = ytPlayer.current?.getPlayerState();
-        // -1 = unstarted, 3 = buffering too long
-        if (state === -1 || state === 3) {
-          autoSkipToNext();
-        }
-      } catch (e) {}
+      if (audio.paused && audio.readyState < 3) autoSkipToNext();
     }, 8000);
 
     return () => {
+      audio.removeEventListener("canplay",        onCanPlay);
+      audio.removeEventListener("timeupdate",     onTimeUpdate);
+      audio.removeEventListener("durationchange", onDurationChange);
+      audio.removeEventListener("ended",          onEnded);
+      audio.removeEventListener("error",          onError);
       clearInterval(intervalRef.current);
       clearTimeout(skipTimerRef.current);
     };
-  }, [currentSong, ytReady]); // eslint-disable-line
+  }, [currentSong]); // eslint-disable-line
 
-  useEffect(() => { ytPlayer.current?.setVolume(volume); }, [volume]);
+  // Volume change
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = volume / 100;
+  }, [volume]);
 
   const togglePlay = () => {
-    if (!ytPlayer.current || !currentSong) return;
-    if (isPlaying) ytPlayer.current.pauseVideo();
-    else           ytPlayer.current.playVideo();
+    const audio = audioRef.current;
+    if (!audio || !currentSong) return;
+    if (isPlaying) { audio.pause(); setIsPlaying(false); }
+    else           { audio.play().then(() => setIsPlaying(true)).catch(() => {}); }
   };
 
   const seek = (e) => {
-    if (!ytPlayer.current || !duration) return;
+    const audio = audioRef.current;
+    if (!audio || !duration) return;
     const rect  = e.currentTarget.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    ytPlayer.current.seekTo(ratio * duration, true);
+    audio.currentTime = ratio * duration;
     setProgress(ratio * duration);
   };
 
@@ -162,7 +130,8 @@ export default function Player({ songs, loading, moodData, currentSong, onSelect
 
   return (
     <div className="player">
-      <div ref={playerRef} style={{ display: "none" }} />
+      {/* Hidden HTML5 audio element */}
+      <audio ref={audioRef} preload="auto" />
 
       {/* Auto skip notification */}
       {skipped && (
@@ -240,9 +209,12 @@ export default function Player({ songs, loading, moodData, currentSong, onSelect
                     <p className="s-title">{song.title}</p>
                     <p className="s-channel">{song.channel}</p>
                   </div>
-                  <a href={song.youtubeUrl} target="_blank" rel="noreferrer"
-                    className="yt-link" onClick={(e) => e.stopPropagation()}
-                    title="Open in YouTube">▶ YT</a>
+                  {/* Album badge instead of YT link */}
+                  {song.album && (
+                    <span className="yt-link" title={song.album}>
+                      💿 {song.album.length > 12 ? song.album.slice(0, 12) + "…" : song.album}
+                    </span>
+                  )}
                 </button>
               );
             })}

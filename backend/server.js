@@ -133,39 +133,32 @@ const moodQueryBank = {
   ],
 };
 
-// ─── Fetch from RapidAPI ──────────────────────────────────────────────────────
-async function fetchYouTubeVideos(query) {
-  const response = await axios.get(
-    "https://youtube-v31.p.rapidapi.com/search",
-    {
-      params: {
-        q: query,
-        part: "snippet,id",
-        regionCode: "IN",
-        maxResults: "10",
-        order: "relevance",
-        type: "video",
-        videoCategoryId: "10",
-        relevanceLanguage: "hi",
-      },
-      headers: {
-        "X-RapidAPI-Key":  process.env.RAPIDAPI_KEY,
-        "X-RapidAPI-Host": "youtube-v31.p.rapidapi.com",
-      },
-    }
-  );
+// ─── Fetch from JioSaavn API ──────────────────────────────────────────────────
+async function fetchJioSaavnSongs(query) {
+  const response = await axios.get("https://saavn.dev/api/search/songs", {
+    params: {
+      query: query,
+      page: 1,
+      limit: 10,
+    },
+  });
 
-  return response.data.items
-    .filter((item) => item.id?.videoId)
-    .map((item) => ({
-      id:         item.id.videoId,
-      title:      item.snippet.title
-        .replace(/&amp;/g, "&")
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'"),
-      channel:    item.snippet.channelTitle,
-      thumbnail:  item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
-      youtubeUrl: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+  const results = response.data?.data?.results || [];
+
+  return results
+    .filter((song) => song.downloadUrl && song.downloadUrl.length > 0)
+    .map((song) => ({
+      id:         song.id,
+      title:      song.name,
+      channel:    song.artists?.primary?.map((a) => a.name).join(", ") || "Unknown Artist",
+      thumbnail:  song.image?.[2]?.url || song.image?.[1]?.url || song.image?.[0]?.url || "",
+      audioUrl:   song.downloadUrl?.[4]?.url   // 320kbps
+                  || song.downloadUrl?.[3]?.url  // 160kbps
+                  || song.downloadUrl?.[2]?.url  // 96kbps
+                  || song.downloadUrl?.[0]?.url, // fallback
+      duration:   song.duration,
+      album:      song.album?.name || "",
+      language:   song.language || "hindi",
     }));
 }
 
@@ -187,8 +180,8 @@ app.post("/api/mood", async (req, res) => {
   try {
     const shuffled = [...queries].sort(() => Math.random() - 0.5);
     const [r1, r2] = await Promise.allSettled([
-      fetchYouTubeVideos(shuffled[0]),
-      fetchYouTubeVideos(shuffled[1]),
+      fetchJioSaavnSongs(shuffled[0]),
+      fetchJioSaavnSongs(shuffled[1]),
     ]);
 
     const allSongs = [];
@@ -211,13 +204,13 @@ app.post("/api/mood", async (req, res) => {
   }
 });
 
-// ─── NEW: Search any song by name ────────────────────────────────────────────
+// Search any song by name
 app.post("/api/search", async (req, res) => {
   const { query } = req.body;
   if (!query || !query.trim()) return res.status(400).json({ error: "Search query is required." });
 
   try {
-    const songs = await fetchYouTubeVideos(query.trim() + " song");
+    const songs = await fetchJioSaavnSongs(query.trim());
     return res.json({ query: query.trim(), songs });
   } catch (err) {
     console.error("Search error:", err.response?.data || err.message);

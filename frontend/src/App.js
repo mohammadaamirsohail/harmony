@@ -146,7 +146,7 @@ export default function App() {
       </div>
 
       <footer className="app-footer">
-        Powered by YouTube · Full songs · No limits
+        Powered by JioSaavn · Full songs · No limits
       </footer>
     </div>
   );
