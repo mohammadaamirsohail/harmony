@@ -135,31 +135,42 @@ const moodQueryBank = {
 
 // ─── Fetch from JioSaavn API ──────────────────────────────────────────────────
 async function fetchJioSaavnSongs(query) {
-  const response = await axios.get("https://saavn.dev/api/search/songs", {
-    params: {
-      query: query,
-      page: 1,
-      limit: 10,
-    },
-  });
+  const apis = [
+    "https://jiosaavn-api-privatecvc2.vercel.app/api/search/songs",
+    "https://saavn.dev/api/search/songs",
+  ];
 
-  const results = response.data?.data?.results || [];
+  for (const apiUrl of apis) {
+    try {
+      const response = await axios.get(apiUrl, {
+        params: { query, page: 1, limit: 10 },
+        timeout: 8000,
+      });
 
-  return results
-    .filter((song) => song.downloadUrl && song.downloadUrl.length > 0)
-    .map((song) => ({
-      id:         song.id,
-      title:      song.name,
-      channel:    song.artists?.primary?.map((a) => a.name).join(", ") || "Unknown Artist",
-      thumbnail:  song.image?.[2]?.url || song.image?.[1]?.url || song.image?.[0]?.url || "",
-      audioUrl:   song.downloadUrl?.[4]?.url   // 320kbps
-                  || song.downloadUrl?.[3]?.url  // 160kbps
-                  || song.downloadUrl?.[2]?.url  // 96kbps
-                  || song.downloadUrl?.[0]?.url, // fallback
-      duration:   song.duration,
-      album:      song.album?.name || "",
-      language:   song.language || "hindi",
-    }));
+      const results = response.data?.data?.results || [];
+      const songs = results
+        .filter((song) => song.downloadUrl && song.downloadUrl.length > 0)
+        .map((song) => ({
+          id:        song.id,
+          title:     song.name,
+          channel:   song.artists?.primary?.map((a) => a.name).join(", ") || "Unknown Artist",
+          thumbnail: song.image?.[2]?.url || song.image?.[1]?.url || song.image?.[0]?.url || "",
+          audioUrl:  song.downloadUrl?.[4]?.url
+                     || song.downloadUrl?.[3]?.url
+                     || song.downloadUrl?.[2]?.url
+                     || song.downloadUrl?.[0]?.url,
+          duration:  song.duration,
+          album:     song.album?.name || "",
+          language:  song.language || "hindi",
+        }));
+
+      if (songs.length > 0) return songs;
+    } catch (err) {
+      console.error(`API failed (${apiUrl}):`, err.message);
+    }
+  }
+
+  return [];
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
